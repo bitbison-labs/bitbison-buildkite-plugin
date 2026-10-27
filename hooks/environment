@@ -17,25 +17,33 @@ bitbison_setting() {
 }
 
 bitbison_fetch() {
-  # buildguard from the channel at the digest it publishes now, kept
-  # per digest under a directory of ours; verified before it is run.
-  local arch dir sums entry sum bin
+  # buildguard at the digest the channel publishes now, one file under a
+  # directory of ours: the agent's plugins directory, where the agent
+  # keeps what plugins bring, else /var/tmp. Verified against the channel
+  # before every run and replaced when the channel moves on, so the
+  # directory never holds more than the current release.
+  local arch dir sums entry bin tmp
   arch=$(uname -m)
-  dir="${BITBISON_PLUGIN_STORE:-${TMPDIR:-/tmp}/bitbison-plugin-$(id -u)}"
+  dir=${BITBISON_PLUGIN_STORE:-}
+  if [ -z "$dir" ] && [ -n "${BUILDKITE_PLUGINS_PATH:-}" ]; then
+    dir="$BUILDKITE_PLUGINS_PATH/bitbison"
+    mkdir -p "$dir" 2>/dev/null || dir=
+  fi
+  [ -n "$dir" ] || dir="/var/tmp/bitbison-plugin-$(id -u)"
   mkdir -p "$dir" && chmod 0700 "$dir" || return 1
   sums=$(curl -fsSL --retry 3 "$BITBISON_CHANNEL/static/linux/$arch/SHA256SUMS") || return 1
   entry=$(printf '%s\n' "$sums" | awk '$2 == "buildguard" || $2 == "*buildguard" {print $1; exit}')
   [ -n "$entry" ] || { echo "bitbison: the channel lists no buildguard for $arch"; return 1; }
-  bin="$dir/buildguard-$entry"
-  if [ ! -x "$bin" ]; then
-    curl -fsSL --retry 3 "$BITBISON_CHANNEL/static/linux/$arch/buildguard" -o "$bin.tmp" || return 1
-    sum=$(sha256sum "$bin.tmp" | awk '{print $1}')
-    if [ "$sum" != "$entry" ]; then
-      rm -f "$bin.tmp"
+  bin="$dir/buildguard"
+  if [ ! -x "$bin" ] || [ "$(sha256sum "$bin" | awk '{print $1}')" != "$entry" ]; then
+    tmp="$bin.$$"
+    curl -fsSL --retry 3 "$BITBISON_CHANNEL/static/linux/$arch/buildguard" -o "$tmp" || { rm -f "$tmp"; return 1; }
+    if [ "$(sha256sum "$tmp" | awk '{print $1}')" != "$entry" ]; then
+      rm -f "$tmp"
       echo "bitbison: buildguard checksum mismatch; not running it"
       return 1
     fi
-    chmod 0755 "$bin.tmp" && mv "$bin.tmp" "$bin" || return 1
+    chmod 0755 "$tmp" && mv -f "$tmp" "$bin" || { rm -f "$tmp"; return 1; }
   fi
   export BITBISON_BUILDGUARD=$bin
 }

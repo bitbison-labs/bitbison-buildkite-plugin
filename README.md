@@ -7,7 +7,7 @@ steps:
   - label: build
     command: make
     plugins:
-      - bitbison-labs/bitbison#v0.1.0: ~
+      - bitbison-labs/bitbison#v0.1.1: ~
 ```
 
 The plugin reads the release channel URL, the submission token and the
@@ -16,13 +16,16 @@ and `BITBISON_INSTANCE`, or from those variables when the pipeline sets
 them. Other secret names:
 
 ```yaml
-      - bitbison-labs/bitbison#v0.1.0:
+      - bitbison-labs/bitbison#v0.1.1:
           channel-secret: MY_CHANNEL
           token-secret: MY_TOKEN
 ```
 
 It runs on Buildkite hosted Linux agents and on self-hosted agents
-alike. For installation, open your Bitbison user portal: the Builds page
+alike. buildguard is fetched from the release channel and verified
+against its checksums on every job; it is kept under the agent's
+plugins directory (or `BITBISON_PLUGIN_STORE`), so a self-hosted agent
+downloads a release once. For installation, open your Bitbison user portal: the Builds page
 carries the installation guide.
 
 Repository code is licensed under [Apache-2.0](LICENSE). Downloaded
