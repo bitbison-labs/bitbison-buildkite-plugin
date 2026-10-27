@@ -1,0 +1,10 @@
+# Bitbison agent hook: the last hook of every job, after the command, the
+# artifact upload and any plugin's pre-exit, on success, failure,
+# cancellation and timeout. Closes the build with the job's outcome, which
+# buildguard reads from the agent's BUILDKITE_COMMAND_EXIT_STATUS, taking
+# what a plugin step that stood down left for it. Sourced: its exit code
+# would be the job's, so nothing here fails the job.
+
+if [ -n "${BITBISON_BUILDGUARD:-}" ] && [ -x "$BITBISON_BUILDGUARD" ]; then
+  BITBISON_HOOK=1 "$BITBISON_BUILDGUARD" finish || echo "bitbison: finish failed"
+fi

@@ -1,0 +1,73 @@
+# Bitbison agent hook: every job on the agent, before the checkout and
+# before any plugin. Installed once into an agent image (a Buildkite hosted
+# agent's custom image, or a self-hosted agent's hooks directory) instead
+# of a plugin line on each step. Resolves the settings, brings buildguard
+# from the release channel and opens the build in hook mode: the
+# organization's build setting in Bitbison decides which repositories are
+# captured, and a step that also carries the Bitbison plugin stands down.
+# Sourced by the agent: never exits, and a capture that cannot start
+# leaves the job to run uncaptured.
+
+bitbison_setting() {
+  # $1 variable: kept when the job's environment sets it, else read from
+  # the cluster secret named by ${1}_SECRET, else by the variable itself.
+  local var=$1 name
+  if [ -n "${!var:-}" ]; then return 0; fi
+  eval "name=\${${var}_SECRET:-$var}"
+  if command -v buildkite-agent >/dev/null 2>&1; then
+    local v
+    v=$(buildkite-agent secret get "$name" 2>/dev/null) || v=
+    if [ -n "$v" ]; then export "$var=$v"; fi
+  fi
+}
+
+bitbison_fetch() {
+  # buildguard at the digest the channel publishes now, one file under a
+  # directory of ours: the agent's plugins directory, where the agent
+  # keeps what plugins bring, else /var/tmp. Verified against the channel
+  # before every run and replaced when the channel moves on, so the
+  # directory never holds more than the current release.
+  local arch dir sums entry bin tmp
+  arch=$(uname -m)
+  dir=${BITBISON_PLUGIN_STORE:-}
+  if [ -z "$dir" ] && [ -n "${BUILDKITE_PLUGINS_PATH:-}" ]; then
+    dir="$BUILDKITE_PLUGINS_PATH/bitbison"
+    mkdir -p "$dir" 2>/dev/null || dir=
+  fi
+  [ -n "$dir" ] || dir="/var/tmp/bitbison-plugin-$(id -u)"
+  mkdir -p "$dir" && chmod 0700 "$dir" || return 1
+  sums=$(curl -fsSL --retry 3 "$BITBISON_CHANNEL/static/linux/$arch/SHA256SUMS") || return 1
+  entry=$(printf '%s\n' "$sums" | awk '$2 == "buildguard" || $2 == "*buildguard" {print $1; exit}')
+  [ -n "$entry" ] || { echo "bitbison: the channel lists no buildguard for $arch"; return 1; }
+  bin="$dir/buildguard"
+  if [ ! -x "$bin" ] || [ "$(sha256sum "$bin" | awk '{print $1}')" != "$entry" ]; then
+    tmp="$bin.$$"
+    curl -fsSL --retry 3 "$BITBISON_CHANNEL/static/linux/$arch/buildguard" -o "$tmp" || { rm -f "$tmp"; return 1; }
+    if [ "$(sha256sum "$tmp" | awk '{print $1}')" != "$entry" ]; then
+      rm -f "$tmp"
+      echo "bitbison: buildguard checksum mismatch; not running it"
+      return 1
+    fi
+    chmod 0755 "$tmp" && mv -f "$tmp" "$bin" || { rm -f "$tmp"; return 1; }
+  fi
+  export BITBISON_BUILDGUARD=$bin
+}
+
+bitbison_start() {
+  bitbison_setting BITBISON_CHANNEL
+  bitbison_setting BITBISON_TOKEN
+  bitbison_setting BITBISON_INSTANCE
+  if [ -z "${BITBISON_CHANNEL:-}" ]; then
+    echo "bitbison: no release channel (cluster secret BITBISON_CHANNEL); this job runs uncaptured"
+    return 0
+  fi
+  bitbison_fetch || { echo "bitbison: could not obtain buildguard from the channel; this job runs uncaptured"; return 0; }
+  # BITBISON_HOOK on each call only, never in the job's environment: a
+  # plugin step later in the job must see itself as a step, not a hook.
+  BITBISON_HOOK=1 "$BITBISON_BUILDGUARD" start || echo "bitbison: start failed; this job runs uncaptured"
+  eval "$(BITBISON_HOOK=1 "$BITBISON_BUILDGUARD" env)"
+  return 0
+}
+
+bitbison_start
+unset -f bitbison_setting bitbison_fetch bitbison_start
