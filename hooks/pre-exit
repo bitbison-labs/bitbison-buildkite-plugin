@@ -1,0 +1,9 @@
+# Bitbison: the last hook of the job, after the command and the artifact
+# upload, on success, failure, cancellation and timeout. Closes the build
+# with the job's outcome, which buildguard reads from the agent's
+# BUILDKITE_COMMAND_EXIT_STATUS. Sourced: its exit code would be the
+# job's, so nothing here fails the job.
+
+if [ -n "${BITBISON_BUILDGUARD:-}" ] && [ -x "$BITBISON_BUILDGUARD" ]; then
+  "$BITBISON_BUILDGUARD" finish || echo "bitbison: finish failed"
+fi

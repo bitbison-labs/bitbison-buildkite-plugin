@@ -1,0 +1,30 @@
+name: Bitbison
+description: Capture build provenance for a Buildkite job and stream it to Bitbison
+author: https://github.com/bitbison-labs
+requirements:
+  - bash
+  - curl
+  - sha256sum
+configuration:
+  properties:
+    channel-secret:
+      type: string
+      description: Cluster secret holding the HTTPS release channel URL. Default BITBISON_CHANNEL.
+    token-secret:
+      type: string
+      description: Cluster secret holding the build submission token. Default BITBISON_TOKEN.
+    instance-secret:
+      type: string
+      description: Cluster secret holding the HTTPS instance URL. Default BITBISON_INSTANCE.
+    mode:
+      type: string
+      enum: [dynamic, standalone]
+      description: dynamic uses an existing agent or brings one for the job; standalone captures only this job with a preinstalled agent.
+    label:
+      type: string
+      description: Optional label recorded on the build.
+    npm-spans:
+      type: boolean
+    vite-spans:
+      type: boolean
+  additionalProperties: false

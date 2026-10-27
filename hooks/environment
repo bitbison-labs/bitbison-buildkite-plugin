@@ -1,0 +1,62 @@
+# Bitbison: the first hook of the job, before the checkout. Resolves the
+# settings, brings buildguard from the release channel, opens the build
+# and exports what the job's later phases need. Sourced by the agent:
+# never exits, and a capture that cannot start leaves the job to run
+# uncaptured.
+
+bitbison_setting() {
+  # $1 variable, $2 plugin key for the secret's name
+  local var=$1 key=$2 name
+  if [ -n "${!var:-}" ]; then return 0; fi
+  eval "name=\${BUILDKITE_PLUGIN_BITBISON_${key}_SECRET:-$var}"
+  if command -v buildkite-agent >/dev/null 2>&1; then
+    local v
+    v=$(buildkite-agent secret get "$name" 2>/dev/null) || v=
+    if [ -n "$v" ]; then export "$var=$v"; fi
+  fi
+}
+
+bitbison_fetch() {
+  # buildguard from the channel at the digest it publishes now, kept
+  # per digest under a directory of ours; verified before it is run.
+  local arch dir sums entry sum bin
+  arch=$(uname -m)
+  dir="${BITBISON_PLUGIN_STORE:-${TMPDIR:-/tmp}/bitbison-plugin-$(id -u)}"
+  mkdir -p "$dir" && chmod 0700 "$dir" || return 1
+  sums=$(curl -fsSL --retry 3 "$BITBISON_CHANNEL/static/linux/$arch/SHA256SUMS") || return 1
+  entry=$(printf '%s\n' "$sums" | awk '$2 == "buildguard" || $2 == "*buildguard" {print $1; exit}')
+  [ -n "$entry" ] || { echo "bitbison: the channel lists no buildguard for $arch"; return 1; }
+  bin="$dir/buildguard-$entry"
+  if [ ! -x "$bin" ]; then
+    curl -fsSL --retry 3 "$BITBISON_CHANNEL/static/linux/$arch/buildguard" -o "$bin.tmp" || return 1
+    sum=$(sha256sum "$bin.tmp" | awk '{print $1}')
+    if [ "$sum" != "$entry" ]; then
+      rm -f "$bin.tmp"
+      echo "bitbison: buildguard checksum mismatch; not running it"
+      return 1
+    fi
+    chmod 0755 "$bin.tmp" && mv "$bin.tmp" "$bin" || return 1
+  fi
+  export BITBISON_BUILDGUARD=$bin
+}
+
+bitbison_start() {
+  bitbison_setting BITBISON_CHANNEL CHANNEL
+  bitbison_setting BITBISON_TOKEN TOKEN
+  bitbison_setting BITBISON_INSTANCE INSTANCE
+  if [ -z "${BITBISON_CHANNEL:-}" ]; then
+    echo "bitbison: no release channel (BITBISON_CHANNEL or the channel-secret); this job runs uncaptured"
+    return 0
+  fi
+  [ -n "${BUILDKITE_PLUGIN_BITBISON_MODE:-}" ] && export BITBISON_MODE=$BUILDKITE_PLUGIN_BITBISON_MODE
+  [ -n "${BUILDKITE_PLUGIN_BITBISON_LABEL:-}" ] && export BITBISON_LABEL=$BUILDKITE_PLUGIN_BITBISON_LABEL
+  [ -n "${BUILDKITE_PLUGIN_BITBISON_NPM_SPANS:-}" ] && export BITBISON_NPM_SPANS=$BUILDKITE_PLUGIN_BITBISON_NPM_SPANS
+  [ -n "${BUILDKITE_PLUGIN_BITBISON_VITE_SPANS:-}" ] && export BITBISON_VITE_SPANS=$BUILDKITE_PLUGIN_BITBISON_VITE_SPANS
+  bitbison_fetch || { echo "bitbison: could not obtain buildguard from the channel; this job runs uncaptured"; return 0; }
+  "$BITBISON_BUILDGUARD" start || echo "bitbison: start failed; this job runs uncaptured"
+  eval "$("$BITBISON_BUILDGUARD" env)"
+  return 0
+}
+
+bitbison_start
+unset -f bitbison_setting bitbison_fetch bitbison_start
