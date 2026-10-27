@@ -7,7 +7,7 @@ steps:
   - label: build
     command: make
     plugins:
-      - bitbison-labs/bitbison#v0.1.1: ~
+      - bitbison-labs/bitbison#v0.1.2: ~
 ```
 
 The plugin reads the release channel URL, the submission token and the
@@ -16,7 +16,7 @@ and `BITBISON_INSTANCE`, or from those variables when the pipeline sets
 them. Other secret names:
 
 ```yaml
-      - bitbison-labs/bitbison#v0.1.1:
+      - bitbison-labs/bitbison#v0.1.2:
           channel-secret: MY_CHANNEL
           token-secret: MY_TOKEN
 ```

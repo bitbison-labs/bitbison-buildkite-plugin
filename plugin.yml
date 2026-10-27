@@ -27,4 +27,7 @@ configuration:
       type: boolean
     vite-spans:
       type: boolean
+    annotate:
+      type: boolean
+      description: Leave a Buildkite annotation naming each captured job's build. Default false.
   additionalProperties: false

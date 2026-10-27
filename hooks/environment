@@ -60,6 +60,7 @@ bitbison_start() {
   [ -n "${BUILDKITE_PLUGIN_BITBISON_LABEL:-}" ] && export BITBISON_LABEL=$BUILDKITE_PLUGIN_BITBISON_LABEL
   [ -n "${BUILDKITE_PLUGIN_BITBISON_NPM_SPANS:-}" ] && export BITBISON_NPM_SPANS=$BUILDKITE_PLUGIN_BITBISON_NPM_SPANS
   [ -n "${BUILDKITE_PLUGIN_BITBISON_VITE_SPANS:-}" ] && export BITBISON_VITE_SPANS=$BUILDKITE_PLUGIN_BITBISON_VITE_SPANS
+  [ -n "${BUILDKITE_PLUGIN_BITBISON_ANNOTATE:-}" ] && export BITBISON_ANNOTATE=$BUILDKITE_PLUGIN_BITBISON_ANNOTATE
   bitbison_fetch || { echo "bitbison: could not obtain buildguard from the channel; this job runs uncaptured"; return 0; }
   "$BITBISON_BUILDGUARD" start || echo "bitbison: start failed; this job runs uncaptured"
   eval "$("$BITBISON_BUILDGUARD" env)"
